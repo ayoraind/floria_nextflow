@@ -26,7 +26,7 @@ pipeline_start_message(version, final_params)
 
 
 // include processes
-include { MINIMAP2_SAM; SAM_SORT_AND_INDEX; LONGSHOT; FLORIA; COMBINE_CONTIG_PLOIDY_INFO } from './modules/processes.nf' addParams(final_params)
+include { MINIMAP2_SAM; SAM_SORT_AND_INDEX; LONGSHOT; FLORIA; COMBINE_CONTIG_PLOIDY_INFO; FLORIA_STRAINER; SAMTOOLS_FASTQ } from './modules/processes.nf' addParams(final_params)
 
 
 
@@ -62,6 +62,10 @@ workflow  {
 	 collected_contig_ploidy_ch = FLORIA.out.cpi_ch.collect( sort: {a, b -> a[0].getBaseName() <=> b[0].getBaseName()} )
 
          COMBINE_CONTIG_PLOIDY_INFO(collected_contig_ploidy_ch)
+	 
+	 FLORIA_STRAINER(SAM_SORT_AND_INDEX.out.bam_ch.join(FLORIA.out.floria_out_ch))
+	 
+	 SAMTOOLS_FASTQ(FLORIA_STRAINER.out.first_bam_ch.join(FLORIA_STRAINER.out.second_bam_ch))
 
 }
 
