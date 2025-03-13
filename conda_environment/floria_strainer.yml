@@ -1,0 +1,7 @@
+name: floria_strainer
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - pip:
+    - floria-strainer>=0.2.1
