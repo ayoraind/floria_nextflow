@@ -1,0 +1,9 @@
+test*
+work
+*.nextflow*
+Sample_files
+*.fastq.gz
+results
+G230309.txt
+*_FLYE
+.default_output
