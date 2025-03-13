@@ -150,8 +150,9 @@ process FLORIA {
     tuple val(meta), path(vcf), path(bam), path(bai), path(fai), path(assembly)
     
     output:
-    tuple val(meta), path("*"), emit: first_assembly_ch
+    tuple val(meta), path("*"), emit: all_ch
     tuple val(meta), path("${meta}_floria/${meta}.log"), emit: log_ch
+    tuple val(meta), path("${meta}_floria"), emit: floria_out_ch 
     path("${meta}_floria/${meta}_contig_ploidy_info.tsv"),   emit: cpi_ch 
     path "versions.yml"                   , emit: versions_ch
 
@@ -167,7 +168,7 @@ process FLORIA {
     floria $args -b $bam -v $vcf -r $assembly -t 1 -o ${meta}_floria --output-reads --gzip-reads > ${meta}.log    
     
     mv ${meta}.log ${meta}_floria/${meta}.log
-    mv ${meta}_floria/contig_ploidy_info.tsv ${meta}_floria/${meta}_contig_ploidy_info.tsv
+    cp ${meta}_floria/contig_ploidy_info.tsv ${meta}_floria/${meta}_contig_ploidy_info.tsv
     
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -204,5 +205,76 @@ process COMBINE_CONTIG_PLOIDY_INFO {
     echo "\$(awk 'FNR>=2 {print}' \${CONTIG_PLOIDY_INFO_FILE})" >> combined_contig_ploidy_info.txt
     done
 
+    """
+}
+
+
+process FLORIA_STRAINER {
+    tag "strain count & bam extraction from $meta"
+    
+    
+    publishDir "${params.output_dir}/floria_strainer_out/$meta", mode:'copy'
+    
+    
+    errorStrategy { task.attempt <= 5 ? "retry" : "ignore" }
+    maxRetries 5
+    
+    input:
+    tuple val(meta), path(bam), path(bai), path(fai), path(floria_out_dir)
+    
+    output:
+    tuple val(meta), path("*"), emit: all_ch
+    tuple val(meta), path("${meta}.0.bam"), emit: first_bam_ch
+    tuple val(meta), path("${meta}.1.bam"), emit: second_bam_ch
+    tuple val(meta), path("${meta}.2.bam"), emit: third_bam_ch, optional:true
+    tuple val(meta), path("${meta}.3.bam"), emit: fourth_bam_ch, optional:true
+    tuple val(meta), path("${meta}.4.bam"), emit: fifth_bam_ch, optional:true
+    tuple val(meta), path("${meta}.log"), emit: log_ch
+    path "versions.yml"                   , emit: versions_ch
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    
+    """
+    # strain count and extracting corresponding bam
+     
+    floria-strainer --bam $bam -m split $floria_out_dir --basename ${meta} > ${meta}.log
+    
+    
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        floria-strainer: \$( floria-strainer --version 2>&1 | cut -f3 -d' ' )
+    END_VERSIONS
+    """
+}
+
+process SAMTOOLS_FASTQ {
+
+   // publishDir "${params.output_dir}/bamtofastq/${meta}", mode:'copy'
+
+    input:
+    tuple val(meta), path(bam0), path(bam1)
+
+    output:
+    tuple val(meta), path("${meta}.0.fastq.gz"), emit: first_fastq_ch
+    tuple val(meta), path("${meta}.1.fastq.gz"), emit: second_fastq_ch
+    path "versions.yml",                   emit: versions_ch
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    """
+
+    samtools fastq -@ 4 $bam0 | gzip > ${meta}.0.fastq.gz
+    samtools fastq -@ 4 $bam1 | gzip > ${meta}.1.fastq.gz
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
+	 END_VERSIONS
     """
 }
