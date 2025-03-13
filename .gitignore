@@ -1,5 +1,6 @@
 test*
-work
+work*
+hs*
 *.nextflow*
 Sample_files
 *.fastq.gz
