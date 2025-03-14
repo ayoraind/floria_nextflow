@@ -70,7 +70,7 @@ process MINIMAP2_SAM {
 process SAM_SORT_AND_INDEX {
     tag "$meta"
 
-   // publishDir "${params.output_dir}", mode:'copy'
+    publishDir "${params.output_dir}/sorted_bam", mode:'copy'
 
     input:
     tuple val(meta), path(sam), path(assembly)
@@ -99,7 +99,7 @@ process SAM_SORT_AND_INDEX {
 process LONGSHOT {
     tag "$meta"
     
-  //  publishDir "${params.output_dir}", mode:'copy'
+    publishDir "${params.output_dir}/longshot", mode:'copy'
 
     input:
     tuple val(meta), path(bam), path(bai), path(fai), path(assembly)
@@ -140,10 +140,10 @@ process FLORIA {
     tag "Strain resolution of $meta assemblies"
     
     
-    publishDir "${params.output_dir}", mode:'copy'
+    publishDir "${params.output_dir}/floria_out", mode:'copy'
     
     
-    errorStrategy { task.attempt <= 5 ? "retry" : "ignore" }
+    errorStrategy { task.attempt <= 3 ? "retry" : "ignore" }
     maxRetries 5
     
     input:
@@ -151,9 +151,9 @@ process FLORIA {
     
     output:
     tuple val(meta), path("*"), emit: all_ch
-    tuple val(meta), path("${meta}_floria/${meta}.log"), emit: log_ch
-    tuple val(meta), path("${meta}_floria"), emit: floria_out_ch 
-    path("${meta}_floria/${meta}_contig_ploidy_info.tsv"),   emit: cpi_ch 
+    tuple val(meta), path("${meta}/${meta}.log"), emit: log_ch
+    tuple val(meta), path("${meta}"), emit: floria_out_ch 
+    path("${meta}/${meta}_contig_ploidy_info.tsv"),   emit: cpi_ch 
     path "versions.yml"                   , emit: versions_ch
 
     when:
@@ -165,10 +165,10 @@ process FLORIA {
     """
     # strain resolution
      
-    floria $args -b $bam -v $vcf -r $assembly -t 1 -o ${meta}_floria --output-reads --gzip-reads > ${meta}.log    
+    floria $args -b $bam -v $vcf -r $assembly -t 1 -o ${meta} --output-reads --gzip-reads > ${meta}.log    
     
-    mv ${meta}.log ${meta}_floria/${meta}.log
-    cp ${meta}_floria/contig_ploidy_info.tsv ${meta}_floria/${meta}_contig_ploidy_info.tsv
+    mv ${meta}.log ${meta}/${meta}.log
+    cp ${meta}/contig_ploidy_info.tsv ${meta}/${meta}_contig_ploidy_info.tsv
     
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -179,7 +179,7 @@ process FLORIA {
 
 
 process COMBINE_CONTIG_PLOIDY_INFO {
-    publishDir "${params.output_dir}", mode:'copy'
+    publishDir "${params.output_dir}/floria_out", mode:'copy'
     tag { 'combine contig ploidy info files'} 
     
     
@@ -216,7 +216,7 @@ process FLORIA_STRAINER {
     publishDir "${params.output_dir}/floria_strainer_out/$meta", mode:'copy'
     
     
-    errorStrategy { task.attempt <= 5 ? "retry" : "ignore" }
+    errorStrategy { task.attempt <= 2 ? "retry" : "ignore" }
     maxRetries 5
     
     input:
@@ -241,7 +241,7 @@ process FLORIA_STRAINER {
     """
     # strain count and extracting corresponding bam
      
-    floria-strainer --bam $bam -m split $floria_out_dir --basename ${meta} > ${meta}.log
+    floria-strainer --bam $bam -m split $floria_out_dir --basename ${meta} &> ${meta}.log
     
     
     cat <<-END_VERSIONS > versions.yml
@@ -253,7 +253,7 @@ process FLORIA_STRAINER {
 
 process SAMTOOLS_FASTQ {
 
-   // publishDir "${params.output_dir}/bamtofastq/${meta}", mode:'copy'
+   publishDir "${params.output_dir}/bamtofastq/${meta}", mode:'copy'
 
     input:
     tuple val(meta), path(bam0), path(bam1)
