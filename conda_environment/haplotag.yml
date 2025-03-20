@@ -1,0 +1,10 @@
+name: haplotag
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - pip:
+    - matplotlib
+    - numpy
+    - natsort
+    - pysam
