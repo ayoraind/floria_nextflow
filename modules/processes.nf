@@ -5,6 +5,7 @@ process MINIMAP2 {
     
   //  publishDir "${params.output_dir}", mode:'copy'
     
+    conda "${projectDir}/conda_environment/minimap2_samtools.yml"
     
     errorStrategy { task.attempt <= 5 ? "retry" : "finish" }
     maxRetries 5
@@ -45,7 +46,9 @@ process MINIMAP2_SAM {
 
     errorStrategy { task.attempt <= 5 ? "retry" : "finish" }
     maxRetries 5
-
+    
+    conda "${projectDir}/conda_environment/minimap2_samtools.yml"
+    
     input:
     tuple val(meta), path(reads), path(assembly)
 
@@ -72,6 +75,8 @@ process SAM_SORT_AND_INDEX {
 
     publishDir "${params.output_dir}/sorted_bam", mode:'copy'
 
+    conda "${projectDir}/conda_environment/minimap2_samtools.yml"
+    
     input:
     tuple val(meta), path(sam), path(assembly)
 
@@ -101,6 +106,9 @@ process LONGSHOT {
     
     publishDir "${params.output_dir}/longshot", mode:'copy'
 
+    
+    conda "${projectDir}/conda_environment/longshot_environment.yml"
+    
     input:
     tuple val(meta), path(bam), path(bai), path(fai), path(assembly)
     
@@ -142,6 +150,7 @@ process FLORIA {
     
     publishDir "${params.output_dir}/floria_out", mode:'copy'
     
+    conda "${projectDir}/conda_environment/floria.yml"
     
     errorStrategy { task.attempt <= 3 ? "retry" : "ignore" }
     maxRetries 5
@@ -209,12 +218,120 @@ process COMBINE_CONTIG_PLOIDY_INFO {
 }
 
 
+process HAPLOTAG_FLORIA_OUTPUT {
+    tag "$meta"
+    
+    publishDir "${params.output_dir}/haplotag_out", mode:'copy'
+    
+    conda "${projectDir}/conda_environment/haplotag.yml"
+
+    input:
+    tuple val(meta), path(bam), path(bai), path(fai), path(floria_out_dir)
+    
+    output:
+    tuple val(meta), path("*.bam"), emit: bam_ch
+    tuple val(meta), path("*.bai"), emit: bai_ch
+    
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    
+    """
+    haplotag_output_dir.py -d $floria_out_dir -b $bam -o $meta
+    
+    """
+}
+
+
+process FLORIA_SAMTOOLS_FASTQ {
+
+   publishDir "${params.output_dir}/bamtofastq_floria", mode:'copy'
+   
+    conda "${projectDir}/conda_environment/minimap2_samtools.yml"
+
+    input:
+    tuple val(meta), path(bam)
+
+    output:
+    tuple val(meta), path("${meta}.fastq.gz"), emit: fastq_ch
+    path "versions.yml",                   emit: versions_ch
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    """
+
+    samtools fastq -@ 4 $bam | gzip > ${meta}.fastq.gz
+    
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
+	 END_VERSIONS
+    """
+}
+
+
+process FLORIA_FLYE {
+    publishDir "${params.output_dir}/floria_flye/${meta}_FLYE", mode:'copy'
+    tag "flye on $meta"
+    memory { 4.GB * task.attempt }
+    
+     conda "${projectDir}/conda_environment/flye.yml"
+
+    errorStrategy { task.attempt <= 5 ? "retry" : "finish" }
+    maxRetries 5
+
+    input:
+    tuple val(meta), path(reads)
+    val mode
+
+    output:
+    tuple val(meta), path("*.fasta")   , emit: fasta_ch
+    tuple val(meta), path("*.gfa")     , emit: gfa_ch
+    tuple val(meta), path("*.gv")      , emit: gv_ch
+    tuple val(meta), path("*.txt")     , emit: txt_ch
+    tuple val(meta), path("*.log")     , emit: log_ch
+    tuple val(meta), path("*.json")    , emit: json_ch
+    path "versions.yml"                , emit: versions_ch
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    def prefix = task.ext.prefix ?: "${meta}"
+    def valid_mode = ["--pacbio-raw", "--pacbio-corr", "--pacbio-hifi", "--nano-raw", "--nano-corr", "--nano-hq"]
+    if ( !valid_mode.contains(mode) )  { error "Unrecognised mode to run Flye. Options: ${valid_mode.join(', ')}" }
+    """
+
+    flye $mode $reads --keep-haplotypes --meta --out-dir . --threads $task.cpus $args
+
+    mv assembly.fasta ${prefix}.fasta
+    mv flye.log ${prefix}.flye.log
+    mv assembly_graph.gfa ${prefix}.assembly_graph.gfa
+    mv assembly_graph.gv ${prefix}.assembly_graph.gv
+    mv assembly_info.txt ${prefix}.assembly_info.txt
+    mv params.json ${prefix}.params.json
+    sed -i "s/^>/>${prefix}_/g" ${prefix}.fasta
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        flye: \$( flye --version )
+    END_VERSIONS
+    """
+
+}
+
 process FLORIA_STRAINER {
     tag "strain count & bam extraction from $meta"
     
     
     publishDir "${params.output_dir}/floria_strainer_out/$meta", mode:'copy'
     
+    conda "${projectDir}/conda_environment/floria_strainer.yml"
     
     errorStrategy { task.attempt <= 2 ? "retry" : "ignore" }
     maxRetries 5
@@ -251,9 +368,11 @@ process FLORIA_STRAINER {
     """
 }
 
-process SAMTOOLS_FASTQ {
+process FLORIA_STRAINER_SAMTOOLS_FASTQ {
 
-   publishDir "${params.output_dir}/bamtofastq/${meta}", mode:'copy'
+   publishDir "${params.output_dir}/bamtofastq_floria_strainer/${meta}", mode:'copy'
+   
+   conda "${projectDir}/conda_environment/minimap2_samtools.yml"
 
     input:
     tuple val(meta), path(bam0), path(bam1)
@@ -277,4 +396,107 @@ process SAMTOOLS_FASTQ {
         samtools: \$(echo \$(samtools --version 2>&1) | sed 's/^.*samtools //; s/Using.*\$//')
 	 END_VERSIONS
     """
+}
+
+process FLORIA_STRAINER_FLYE_READ1 {
+    publishDir "${params.output_dir}/floria_strainer_flye1/${meta}_FLYE", mode:'copy'
+    tag "flye on $meta"
+    memory { 4.GB * task.attempt }
+	
+    conda "${projectDir}/conda_environment/flye.yml"
+    
+    errorStrategy { task.attempt <= 5 ? "retry" : "finish" }
+    maxRetries 5
+
+    input:
+    tuple val(meta), path(reads)
+    val mode
+
+    output:
+    tuple val(meta), path("*.fasta")   , emit: fasta_ch
+    tuple val(meta), path("*.gfa")     , emit: gfa_ch
+    tuple val(meta), path("*.gv")      , emit: gv_ch
+    tuple val(meta), path("*.txt")     , emit: txt_ch
+    tuple val(meta), path("*.log")     , emit: log_ch
+    tuple val(meta), path("*.json")    , emit: json_ch
+    path "versions.yml"                , emit: versions_ch
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    def prefix = task.ext.prefix ?: "${meta}"
+    def valid_mode = ["--pacbio-raw", "--pacbio-corr", "--pacbio-hifi", "--nano-raw", "--nano-corr", "--nano-hq"]
+    if ( !valid_mode.contains(mode) )  { error "Unrecognised mode to run Flye. Options: ${valid_mode.join(', ')}" }
+    """
+
+    flye $mode $reads --keep-haplotypes --meta --out-dir . --threads $task.cpus $args
+
+    mv assembly.fasta ${prefix}.fasta
+    mv flye.log ${prefix}.flye.log
+    mv assembly_graph.gfa ${prefix}.assembly_graph.gfa
+    mv assembly_graph.gv ${prefix}.assembly_graph.gv
+    mv assembly_info.txt ${prefix}.assembly_info.txt
+    mv params.json ${prefix}.params.json
+    sed -i "s/^>/>${prefix}_/g" ${prefix}.fasta
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        flye: \$( flye --version )
+    END_VERSIONS
+    """
+
+}
+
+
+process FLORIA_STRAINER_FLYE_READ2 {
+    publishDir "${params.output_dir}/floria_strainer_flye2/${meta}_FLYE", mode:'copy'
+    tag "flye on $meta"
+    memory { 4.GB * task.attempt }
+
+    errorStrategy { task.attempt <= 5 ? "retry" : "finish" }
+    maxRetries 5
+
+    conda "${projectDir}/conda_environment/flye.yml"
+    
+    input:
+    tuple val(meta), path(reads)
+    val mode
+
+    output:
+    tuple val(meta), path("*.fasta")   , emit: fasta_ch
+    tuple val(meta), path("*.gfa")     , emit: gfa_ch
+    tuple val(meta), path("*.gv")      , emit: gv_ch
+    tuple val(meta), path("*.txt")     , emit: txt_ch
+    tuple val(meta), path("*.log")     , emit: log_ch
+    tuple val(meta), path("*.json")    , emit: json_ch
+    path "versions.yml"                , emit: versions_ch
+
+    when:
+    task.ext.when == null || task.ext.when
+
+    script:
+    def args = task.ext.args ?: ''
+    def prefix = task.ext.prefix ?: "${meta}"
+    def valid_mode = ["--pacbio-raw", "--pacbio-corr", "--pacbio-hifi", "--nano-raw", "--nano-corr", "--nano-hq"]
+    if ( !valid_mode.contains(mode) )  { error "Unrecognised mode to run Flye. Options: ${valid_mode.join(', ')}" }
+    """
+
+    flye $mode $reads --keep-haplotypes --meta --out-dir . --threads $task.cpus $args
+
+    mv assembly.fasta ${prefix}.fasta
+    mv flye.log ${prefix}.flye.log
+    mv assembly_graph.gfa ${prefix}.assembly_graph.gfa
+    mv assembly_graph.gv ${prefix}.assembly_graph.gv
+    mv assembly_info.txt ${prefix}.assembly_info.txt
+    mv params.json ${prefix}.params.json
+    sed -i "s/^>/>${prefix}_/g" ${prefix}.fasta
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        flye: \$( flye --version )
+    END_VERSIONS
+    """
+
 }
