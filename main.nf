@@ -26,7 +26,7 @@ pipeline_start_message(version, final_params)
 
 
 // include processes
-include { MINIMAP2_SAM; SAM_SORT_AND_INDEX; LONGSHOT; FLORIA; COMBINE_CONTIG_PLOIDY_INFO; FLORIA_STRAINER; SAMTOOLS_FASTQ } from './modules/processes.nf' addParams(final_params)
+include { MINIMAP2_SAM; SAM_SORT_AND_INDEX; LONGSHOT; FLORIA; COMBINE_CONTIG_PLOIDY_INFO; HAPLOTAG_FLORIA_OUTPUT; FLORIA_SAMTOOLS_FASTQ; FLORIA_FLYE; FLORIA_STRAINER; FLORIA_STRAINER_SAMTOOLS_FASTQ; FLORIA_STRAINER_FLYE_READ1; FLORIA_STRAINER_FLYE_READ2 } from './modules/processes.nf' addParams(final_params)
 
 
 
@@ -63,9 +63,19 @@ workflow  {
 
          COMBINE_CONTIG_PLOIDY_INFO(collected_contig_ploidy_ch)
 	 
+	 HAPLOTAG_FLORIA_OUTPUT(SAM_SORT_AND_INDEX.out.bam_ch.join(FLORIA.out.floria_out_ch))
+	 
+	 FLORIA_SAMTOOLS_FASTQ(HAPLOTAG_FLORIA_OUTPUT.out.bam_ch)
+	 
+	 FLORIA_FLYE(FLORIA_SAMTOOLS_FASTQ.out.fastq_ch, params.valid_mode)
+	 
 	 FLORIA_STRAINER(SAM_SORT_AND_INDEX.out.bam_ch.join(FLORIA.out.floria_out_ch))
 	 
-	 SAMTOOLS_FASTQ(FLORIA_STRAINER.out.first_bam_ch.join(FLORIA_STRAINER.out.second_bam_ch))
+	 FLORIA_STRAINER_SAMTOOLS_FASTQ(FLORIA_STRAINER.out.first_bam_ch.join(FLORIA_STRAINER.out.second_bam_ch))
+	 
+	 FLORIA_STRAINER_FLYE_READ1(FLORIA_STRAINER_SAMTOOLS_FASTQ.out.first_fastq_ch, params.valid_mode)
+	 
+	 FLORIA_STRAINER_FLYE_READ2(FLORIA_STRAINER_SAMTOOLS_FASTQ.out.second_fastq_ch, params.valid_mode)
 
 }
 
