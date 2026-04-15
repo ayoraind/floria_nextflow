@@ -3,5 +3,7 @@ channels:
   - bioconda
   - conda-forge
 dependencies:
+  - pip # has to be installed before the pip dependencies, otherwise conda will try to install pip from the bioconda channel and fail because it is not available for python 3.11
+  - python=3.11
   - pip:
     - floria-strainer>=0.2.1
