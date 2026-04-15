@@ -5,7 +5,7 @@ def help_message() {
         nextflow run main.nf --reads "PathToReadFile(s)" --output_dir "PathToOutputDir" --assemblies "PathToAssemblies" 
 
         Mandatory arguments:
-         --reads                        Query fastqz file of sequences you wish to supply as input (e.g., "/MIGE/01_DATA/01_FASTQ/T055-8-*.fastq.gz")
+         --reads                        Query fastq.gz file of sequences you wish to supply as input (e.g., "/MIGE/01_DATA/01_FASTQ/T055-8-*.fastq.gz")
          --assemblies                   must be Flye assembly (e.g., "/MIGE/01_DATA/03_ASSEMBLY/*_FLYE/T055-8-*.fasta").
          --output_dir	                Output directory
 
@@ -36,7 +36,7 @@ def pipeline_start_message(String version, Map params){
     log.info "Fastq inputs      : ${params.reads}"
     log.info ""
     log.info "-------------------------- Other parameters --------------------------"
-    params.sort{ it.key }.each{ k, v ->
+    params.sort{ a, b -> a.key <=> b.key }.each{ k, v ->
         if (v){
             log.info "${k}: ${v}"
         }
@@ -49,7 +49,7 @@ def pipeline_start_message(String version, Map params){
 }
 
 
-def complete_message(Map params, nextflow.script.WorkflowMetadata workflow, String version){
+def complete_message(Map _params, nextflow.script.WorkflowMetadata workflow, String version){
     // Display complete message
     log.info ""
     log.info "Ran the workflow: ${workflow.scriptName} ${version}"
