@@ -6,6 +6,7 @@ def default_params(){
     // Defaults for configurable variables
     params.help = false
     params.version = false
+    params.publish_dir_mode = 'copy'
     params.reads = false
     params.assemblies = false
     params.output_dir = false
